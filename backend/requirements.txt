@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic-settings
+alembic
+python-dotenv          # 如果使用 .env 配置文件
+httpx                  # 测试 FastAPI 接口
+pymysql                # 未来换 MySQL 时使用
