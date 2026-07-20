@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import {ref, computed, watch, onMounted} from "vue";
+import {ref, computed, onMounted} from "vue";
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Calendar,
-  Check,
   CircleCheck,
   Delete,
   EditPen,
@@ -11,19 +10,17 @@ import {
   Tickets,
 } from '@element-plus/icons-vue'
 
-type Priority = 'low' | 'medium' | 'high'
+import {
+  clearCompletedTodos,
+  createTodo,
+  getTodos,
+  removeTodo,
+  updateTodo,
+  type Priority,
+  type Todo,
+} from './api/todos'
+
 type Filter = 'all' | 'active' | 'completed'
-
-type Todo = {
-  id: string
-  title: string
-  completed: boolean
-  priority: Priority
-  dueDate: string
-  createdAt: string
-}
-
-const STORAGE_KEY = 'todo-list-items'
 
 const todos = ref<Todo[]>([]);
 const newTodoTitle = ref('');
@@ -38,6 +35,7 @@ const priorityOptions = {
   medium: { label: '还行', type: 'warning' as const },
   high: { label: '急急', type: 'danger' as const },
 }
+
 const filteredTodos = computed(() => {
   if (currentFilter.value === 'active') {
     return todos.value.filter(todo => !todo.completed);
@@ -56,11 +54,27 @@ const completionRate = computed(() => {
   return Math.round((completedCount.value / todos.value.length) * 100);
 })
 
-function createId() {
-  return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+function replaceTodo(updatedTodo: Todo) {
+  const index = todos.value.findIndex((todo) => todo.id === updatedTodo.id)
+
+  if (index !== -1) {
+    todos.value[index] = updatedTodo
+  }
 }
 
-function addTodo() {
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '操作失败，请稍后重试'
+}
+
+async function loadTodos() {
+  try {
+    todos.value = await getTodos()
+  } catch (error) {
+    ElMessage.error(`加载任务失败：${getErrorMessage(error)}`)
+  }
+}
+
+async function addTodo() {
   const title = newTodoTitle.value.trim();
 
   if (!title) {
@@ -68,24 +82,31 @@ function addTodo() {
     return
   }
 
-  todos.value.unshift({
-    id: createId(),
-    title,
-    completed: false,
-    priority: selectedPriority.value,
-    dueDate: selectedDueDate.value,
-    createdAt: new Date().toISOString()
-  })
-
-  newTodoTitle.value = ''
-  selectedPriority.value = 'medium'
-  selectedDueDate.value = ''
-  ElMessage.success("任务已添加")
+  try {
+    const todo = await createTodo({
+      title,
+      completed: false,
+      priority: selectedPriority.value,
+      dueDate: selectedDueDate.value,
+    })
+    todos.value.unshift(todo)
+    newTodoTitle.value = ''
+    selectedPriority.value = 'medium'
+    selectedDueDate.value = ''
+    ElMessage.success("任务已添加")
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  }
 }
 
-function toggleTodo(todo: Todo) {
-  todo.completed = !todo.completed
-  ElMessage.success(todo.completed ? '任务已完成' : '任务已恢复')
+async function toggleTodo(todo: Todo) {
+  try {
+    const updatedTodo = await updateTodo(todo.id, { completed: !todo.completed })
+    replaceTodo(updatedTodo)
+    ElMessage.success(updatedTodo.completed ? '任务已完成' : '任务已恢复')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  }
 }
 
 function openEditDialog(todo: Todo) {
@@ -93,7 +114,7 @@ function openEditDialog(todo: Todo) {
   editTitle.value = todo.title
 }
 
-function saveEdit() {
+async function saveEdit() {
   if (!editingTodo.value)
     return
   const title = editTitle.value.trim()
@@ -101,9 +122,14 @@ function saveEdit() {
     ElMessage.warning('任务内容不能为空')
     return
   }
-  editingTodo.value.title = title
-  editingTodo.value = null
-  ElMessage.success('任务已更新')
+  try {
+    const updatedTodo = await updateTodo(editingTodo.value.id, { title })
+    replaceTodo(updatedTodo)
+    editingTodo.value = null
+    ElMessage.success('任务已更新')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  }
 }
 
 async function deleteTodo(todo: Todo) {
@@ -113,9 +139,14 @@ async function deleteTodo(todo: Todo) {
       cancelButtonText: '取消',
       type: 'warning',
     })
+    await removeTodo(todo.id)
     todos.value = todos.value.filter((item) => item.id !== todo.id)
     ElMessage.success('任务已删除')
-  } catch {}
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getErrorMessage(error))
+    }
+  }
 }
 
 function formatDate(date: string) {
@@ -133,26 +164,19 @@ async function clearCompelet() {
       cancelButtonText: '取消',
       type: 'warning',
     })
+
+    await clearCompletedTodos()
     todos.value = todos.value.filter((todo) => !todo.completed)
     ElMessage.success('已清除完成任务')
-  } catch {}
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getErrorMessage(error))
+    }
+  }
 }
 
-onMounted(() => {
-  const savedTodos = localStorage.getItem(STORAGE_KEY)
-  if (!savedTodos) return
-  try {
-    todos.value = JSON.parse(savedTodos)
-  } catch {
-    localStorage.removeItem(STORAGE_KEY)
-  }
-})
+onMounted(loadTodos);
 
-watch(
-  todos,
-  (value) => localStorage.setItem(STORAGE_KEY, JSON.stringify(value)),
-  { deep: true },
-)
 </script>
 
 
