@@ -6,11 +6,11 @@ from app.models import Todo
 from app.schemas import TodoCreate, TodoUpdate
 
 
-def get_todos(db: Session, complete: bool | None = None) -> list[Todo]:
+def get_todos(db: Session, completed: bool | None = None) -> list[Todo]:
     query = db.query(Todo)
 
-    if complete is not None:
-        query = query.filter(Todo.complete == complete)
+    if completed is not None:
+        query = query.filter(Todo.completed == completed)
 
     return query.order_by(Todo.created_at.desc()).all()
 

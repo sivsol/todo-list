@@ -10,7 +10,7 @@ router = APIRouter(prefix="/todos", tags=["todos"])
 
 @router.get("", response_model=list[TodoRead])
 def list_todos(completed: bool | None = Query(default=None), db: Session = Depends(get_db),):
-    return crud.get_todos(db, complete=completed)
+    return crud.get_todos(db, completed=completed)
 
 @router.post("", response_model=TodoRead, status_code=status.HTTP_201_CREATED)
 def add_todo(todo_data: TodoCreate, db: Session = Depends(get_db)):
